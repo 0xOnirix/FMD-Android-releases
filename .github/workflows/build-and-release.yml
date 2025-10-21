@@ -63,7 +63,9 @@ jobs:
       run: |
         cd source
         ./gradlew clean assembleRelease
-
+        ls
+        ls source/app/build/outputs/apk/
+        
     - name: Decode keystore
       run: |
         echo "$SIGNING_KEYSTORE" | base64 --decode > keystore.jks
