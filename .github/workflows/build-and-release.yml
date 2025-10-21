@@ -63,9 +63,7 @@ jobs:
       run: |
         cd source
         ./gradlew clean assembleRelease
-        pwd
-
-        ls app/build/outputs/apk/
+        mv app/build/outputs/apk/mainline/release/*.apk ../FindMyDevice.apk
 
     - name: Decode keystore
       run: |
@@ -73,12 +71,10 @@ jobs:
 
     - name: Sign APK
       run: |
-        pwd
-        ls
-        ls source/app/build/outputs/apk/
+        cd ../
         APK_DIR="source/app/build/outputs/apk/release"
-        UNSIGNED_APK=$(find "$APK_DIR" -name "*-unsigned.apk" | head -n 1)
-        SIGNED_APK="$APK_DIR/fmd-android-${TAG}-signed.apk"
+        UNSIGNED_APK=../FindMyDevice.apk
+        SIGNED_APK="../fmd-android-${TAG}-signed.apk"
 
         echo "Signing $UNSIGNED_APK ..."
         jarsigner -verbose \
