@@ -73,6 +73,9 @@ jobs:
 
     - name: Sign APK
       run: |
+        pwd
+        ls
+        ls source/app/build/outputs/apk/
         APK_DIR="source/app/build/outputs/apk/release"
         UNSIGNED_APK=$(find "$APK_DIR" -name "*-unsigned.apk" | head -n 1)
         SIGNED_APK="$APK_DIR/fmd-android-${TAG}-signed.apk"
