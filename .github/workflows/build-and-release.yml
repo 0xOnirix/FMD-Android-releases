@@ -18,8 +18,8 @@ jobs:
       - name: Get latest release from GitLab
         id: gitlab_release
         run: |
-          PROJECT_ID=40526265
-          LATEST=$(curl -s "https://gitlab.com/api/v4/projects/${PROJECT_ID}/releases" | jq -r '.[0].tag_name')
+          PROJECT="fmd-foss%2Ffmd-android"
+          LATEST=$(curl -s "https://gitlab.com/api/v4/projects/${PROJECT}/releases" | jq -r '.[0].tag_name')
           echo "Latest tag on GitLab: $LATEST"
           echo "TAG=$LATEST" >> $GITHUB_ENV
 
