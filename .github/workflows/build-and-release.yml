@@ -78,8 +78,8 @@ jobs:
         jarsigner -verbose \
           -sigalg SHA256withRSA -digestalg SHA-256 \
           -keystore keystore.jks \
-          -storepass "$KEYSTORE_PASS" \
-          -keypass "$KEY_PASS" \
+          -storepass "$KEYSTORE_PASSWORD" \
+          -keypass "$KEY_PASSWORD" \
           "$UNSIGNED_APK" "$KEY_ALIAS"
 
         echo "Aligning APK ..."
