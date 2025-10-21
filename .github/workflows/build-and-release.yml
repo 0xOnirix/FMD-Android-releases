@@ -1,0 +1,103 @@
+name: Build and Release FMD Android
+
+on:
+  schedule:
+    - cron: "0 0 * * *"  # check daily at 00:00
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # required for creating releases
+
+    steps:
+      - name: Checkout builder repo
+        uses: actions/checkout@v4
+
+      - name: Get latest release from GitLab
+        id: gitlab_release
+        run: |
+          PROJECT_ID=40526265
+          LATEST=$(curl -s "https://gitlab.com/api/v4/projects/${PROJECT_ID}/releases" | jq -r '.[0].tag_name')
+          echo "Latest tag on GitLab: $LATEST"
+          echo "TAG=$LATEST" >> $GITHUB_ENV
+
+          # Check if release already exists on GitHub
+          EXISTS=$(curl -s "https://api.github.com/repos/${{ github.repository }}/releases/tags/$LATEST" -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" | jq -r '.id')
+          if [ "$EXISTS" != "null" ]; then
+            echo "Release $LATEST already exists on GitHub. Skipping build."
+            echo "skip=true" >> $GITHUB_ENV
+          else
+            echo "skip=false" >> $GITHUB_ENV
+          fi
+
+      - name: Stop if release already exists
+        if: env.skip == 'true'
+        run: echo "Release already published. No new build needed."
+
+      - name: Download source from GitLab
+        if: env.skip == 'false'
+        run: |
+          curl -L -o source.tar.gz "https://gitlab.com/fmd-foss/fmd-android/-/archive/${TAG}/fmd-android-${TAG}.tar.gz"
+          tar -xzf source.tar.gz
+          mv fmd-android-* source
+
+      - name: Setup JDK
+        if: env.skip == 'false'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Android SDK
+        if: env.skip == 'false'
+        uses: android-actions/setup-android@v3
+
+      - name: Build unsigned APK
+        if: env.skip == 'false'
+        working-directory: source
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Decode keystore
+        if: env.skip == 'false'
+        run: echo "$KEYSTORE_BASE64" | base64 --decode > keystore.jks
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+
+      - name: Sign APK
+        if: env.skip == 'false'
+        run: |
+          APK_DIR="source/app/build/outputs/apk/release"
+          UNSIGNED_APK=$(find "$APK_DIR" -name "*-unsigned.apk" | head -n 1)
+          SIGNED_APK="$APK_DIR/fmd-android-${TAG}-signed.apk"
+
+          echo "Signing $UNSIGNED_APK ..."
+          jarsigner -verbose \
+            -sigalg SHA256withRSA -digestalg SHA-256 \
+            -keystore keystore.jks \
+            -storepass "${{ secrets.KEYSTORE_PASS }}" \
+            -keypass "${{ secrets.KEY_PASS }}" \
+            "$UNSIGNED_APK" "${{ secrets.KEY_ALIAS }}"
+
+          echo "Aligning APK ..."
+          zipalign -v 4 "$UNSIGNED_APK" "$SIGNED_APK"
+          echo "SIGNED_APK=$SIGNED_APK" >> $GITHUB_ENV
+
+      - name: Create GitHub Release
+        if: env.skip == 'false'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          name: "FMD Android ${{ env.TAG }}"
+          body: "Automatically built from GitLab release **${{ env.TAG }}**."
+          files: ${{ env.SIGNED_APK }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload signed APK as artifact (for convenience)
+        if: env.skip == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: fmd-android-${{ env.TAG }}-signed
+          path: ${{ env.SIGNED_APK }}
