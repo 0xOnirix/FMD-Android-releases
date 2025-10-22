@@ -47,6 +47,11 @@ jobs:
         echo "SIGNED_APK=apk/findmydevice-${TAG}-signed.apk" >> "$GITHUB_ENV"
         echo "ALIGNED_APK=apk/findmydevice-${TAG}-aligned.apk" >> "$GITHUB_ENV"
 
+    - name: Setup zipalign
+      id: setup-zipalign
+      if: ${{ env.STOP != 'true' }} 
+      run: echo "${ANDROID_HOME}/build-tools/36.1.0" >> $GITHUB_PATH
+
     - name: Zipalign APK
       id: zipalign-apk
       if: ${{ env.STOP != 'true' }}
