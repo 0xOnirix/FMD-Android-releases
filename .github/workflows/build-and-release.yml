@@ -12,12 +12,13 @@ jobs:
     steps:
 
     - name: Check if new FMD-Android release
-      id: check-fmd-android-release
+      id: check-new-source-release
       run: |
         SOURCE_REPO="fmd-foss%2Ffmd-android"
         TARGET_REPO="${{ github.repository }}"
         SOURCE_TAG=$(curl -s "https://gitlab.com/api/v4/projects/$SOURCE_REPO/repository/tags" | jq -r '.[0].name')
         LATEST_RELEASE=$(curl -s "https://api.github.com/repos/$TARGET_REPO/releases/latest" | jq -r '.tag_name' 2>/dev/null || echo "")
+
         if [ "$SOURCE_TAG" == "$LATEST_RELEASE" ]; then
           echo "STOP=true" >> "$GITHUB_ENV"
         else
@@ -26,7 +27,7 @@ jobs:
 
     - name: Download source from GitLab
       id: download-source
-      if: env.STOP != 'true'
+      if: ${{ env.STOP != 'true' }}
       run: |
         mkdir source
         curl -L -o source/fmd-android-$TAG.tar.gz \
@@ -35,41 +36,49 @@ jobs:
 
     - name: Build APK
       id: build-apk
-      if: env.STOP != 'true'
+      if: ${{ env.STOP != 'true' }}
       run: |
         mkdir apk
         cd source
         ./gradlew clean assembleRelease
         mv app/build/outputs/apk/prod/release/*.apk ../apk/fmd-android-${TAG}-unsigned.apk
 
+        echo "UNSIGNED_APK=apk/findmydevice-${TAG}-unsigned.apk" >> "$GITHUB_ENV"
+        echo "SIGNED_APK=apk/findmydevice-${TAG}-signed.apk" >> "$GITHUB_ENV"
+        echo "ALIGNED_APK=apk/findmydevice-${TAG}-aligned.apk" >> "$GITHUB_ENV"
+
+    - name: Zipalign APK
+      id: zipalign-apk
+      if: ${{ env.STOP != 'true' }}
+      run: |
+        zipalign -v 4 "$UNSIGNED_APK" "$ALIGNED_APK"
+
     - name: Decode keystore
       id: decode-keystore
-      if: env.STOP != 'true'
+      if: ${{ env.STOP != 'true' }}
       run: |
-        echo "$SIGNING_KEYSTORE" | base64 --decode > keystore.jks
+        echo "${{ secrets.SIGNING_KEYSTORE }}" | base64 -d > keystore.jks
 
     - name: Sign APK
       id: sign-apk
-      if: env.STOP != 'true'
+      if: ${{ env.STOP != 'true' }}
       run: |
-        UNSIGNED_APK=apk/fmd-android-${TAG}-unsigned.apk
-        SIGNED_APK="apk/fmd-android-${TAG}-signed.apk"
+        apksigner sign \
+            --ks keystore.jks \
+            --ks-key-alias "${{ secrets.KEY_ALIAS }}" \
+            --ks-pass pass:"${{ secrets.KEYSTORE_PASSWORD }}" \
+            --key-pass pass:"${{ secrets.KEY_PASSWORD }}" \
+            --out $SIGNED_APK \
+            $ALIGNED_APK
 
-        echo "Signing $UNSIGNED_APK ..."
-        jarsigner -verbose \
-          -sigalg SHA256withRSA -digestalg SHA-256 \
-          -keystore keystore.jks \
-          -storepass "$KEYSTORE_PASSWORD" \
-          -keypass "$KEY_PASSWORD" \
-          "$UNSIGNED_APK" "$KEY_ALIAS"
-
-        echo "Aligning APK ..."
-        zipalign -v 4 "$UNSIGNED_APK" "$SIGNED_APK"
-        echo "SIGNED_APK=$SIGNED_APK" >> $GITHUB_ENV
+    - name: Verify APK signature
+      id: verify-signature
+      if: ${{ env.STOP != 'true' }}
+      run: apksigner verify --verbose "$SIGNED_APK"
 
     - name: Create GitHub release
       id: create-release
-      if: env.STOP != 'true'
+      if: ${{ env.STOP != 'true' }}
       uses: softprops/action-gh-release@v1
       with:
         tag_name: ${{ env.TAG }}
@@ -80,10 +89,10 @@ jobs:
 
     - name: Upload signed APK
       id: upload-apk
-      if: env.STOP != 'true'
+      if: ${{ env.STOP != 'true' }}
       uses: actions/upload-release-asset@v1
       with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        upload_url: ${{ steps.create-release.outputs.upload_url }}
         asset_path: ${{ env.SIGNED_APK }}
         asset_name: fmd-android-${{ env.TAG }}.apk
         asset_content_type: application/vnd.android.package-archive
