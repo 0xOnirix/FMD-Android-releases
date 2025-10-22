@@ -3,78 +3,60 @@ name: Build and Release FMD Android APK
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 0 * * *'  # optional: daily check
+    - cron: '0 0 * * *'
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.16-8/x64
-      ANDROID_HOME: /usr/local/lib/android/sdk
-      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
 
     steps:
-    - name: Checkout workflow
-      uses: actions/checkout@v3
 
-    - name: Install dependencies
+    - name: Check if new FMD-Android release
+      id: check-fmd-android-release
       run: |
-        sudo apt-get update
-        sudo apt-get install -y zip unzip curl jq
-
-    - name: Get latest release from GitLab
-      id: gitlab_release
-      run: |
-        PROJECT="fmd-foss%2Ffmd-android"  # URL-encoded path
-        LATEST=$(curl -s "https://gitlab.com/api/v4/projects/$PROJECT/releases" \
-                 | jq -r '.[0].tag_name')
-        echo "Latest tag on GitLab: $LATEST"
-        echo "TAG=$LATEST" >> $GITHUB_ENV
-
-        # Check if release already exists on GitHub
-        EXISTS=$(curl -s "https://api.github.com/repos/${{ github.repository }}/releases/tags/$LATEST" \
-                  -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-                  | jq -r '.id')
-        if [ "$EXISTS" != "null" ]; then
-          echo "Release $LATEST already exists on GitHub. Skipping build."
-          echo "skip=true" >> $GITHUB_ENV
+        SOURCE_REPO="fmd-foss%2Ffmd-android"
+        TARGET_REPO="${{ github.repository }}"
+        SOURCE_TAG=$(curl -s "https://gitlab.com/api/v4/projects/$SOURCE_REPO/repository/tags" | jq -r '.[0].name')
+        LATEST_RELEASE=$(curl -s "https://api.github.com/repos/$TARGET_REPO/releases/latest" | jq -r '.tag_name' 2>/dev/null || echo "")
+        if [ "$SOURCE_TAG" == "$LATEST_RELEASE" ]; then
+          echo "STOP=true" >> "$GITHUB_ENV"
         else
-          echo "skip=false" >> $GITHUB_ENV
+          echo "TAG=$SOURCE_TAG" >> "$GITHUB_ENV"
         fi
 
-    - name: Stop if release exists
-      if: env.skip == 'true'
-      run: exit 0
-
     - name: Download source from GitLab
+      id: download-source
+      if: env.STOP != 'true'
       run: |
-        mkdir -p source
-        curl -L -o source/fmd-android-$TAG.tar.gz \
-          "https://gitlab.com/fmd-foss/fmd-android/-/archive/$TAG/fmd-android-$TAG.tar.gz"
-        tar -xzf source/fmd-android-$TAG.tar.gz -C source --strip-components=1
+        mkdir source
+        curl -L -o source/fmd-android-$SOURCE_TAG.tar.gz \
+          "https://gitlab.com/fmd-foss/fmd-android/-/archive/$SOURCE_TAG/fmd-android-$SOURCE_TAG.tar.gz"
+        tar -xzf source/fmd-android-$SOURCE_TAG.tar.gz -C source --strip-components=1
 
-    - name: Set up JDK
-      uses: actions/setup-java@v3
-      with:
-        distribution: temurin
-        java-version: 17
-
-    - name: Build release APK
+    - name: Build APK
+      id: build-apk
+      if: env.STOP != 'true'
       run: |
+        mkdir apk
         cd source
         ./gradlew clean assembleRelease
-        mv app/build/outputs/apk/mainline/release/*.apk ../FindMyDevice.apk
+        mv app/build/outputs/apk/mainline/release/*.apk ../apk/fmd-android-${TAG}-unsigned.apk
+        ls app/build/outputs/apk/mainline/release
+        pwd
+        ls ../apk
 
     - name: Decode keystore
+      id: decode-keystore
+      if: env.STOP != 'true'
       run: |
         echo "$SIGNING_KEYSTORE" | base64 --decode > keystore.jks
 
     - name: Sign APK
+      id: sign-apk
+      if: env.STOP != 'true'
       run: |
-        cd ../
-        APK_DIR="source/app/build/outputs/apk/release"
-        UNSIGNED_APK=../FindMyDevice.apk
-        SIGNED_APK="../fmd-android-${TAG}-signed.apk"
+        UNSIGNED_APK=apk/fmd-android-${TAG}-unsigned.apk
+        SIGNED_APK="apk/fmd-android-${TAG}-signed.apk"
 
         echo "Signing $UNSIGNED_APK ..."
         jarsigner -verbose \
@@ -89,6 +71,8 @@ jobs:
         echo "SIGNED_APK=$SIGNED_APK" >> $GITHUB_ENV
 
     - name: Create GitHub release
+      id: create-release
+      if: env.STOP != 'true'
       uses: softprops/action-gh-release@v1
       with:
         tag_name: ${{ env.TAG }}
@@ -98,6 +82,8 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Upload signed APK
+      id: upload-apk
+      if: env.STOP != 'true'
       uses: actions/upload-release-asset@v1
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
