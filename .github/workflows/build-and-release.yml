@@ -29,9 +29,9 @@ jobs:
       if: env.STOP != 'true'
       run: |
         mkdir source
-        curl -L -o source/fmd-android-$SOURCE_TAG.tar.gz \
-          "https://gitlab.com/fmd-foss/fmd-android/-/archive/$SOURCE_TAG/fmd-android-$SOURCE_TAG.tar.gz"
-        tar -xzf source/fmd-android-$SOURCE_TAG.tar.gz -C source --strip-components=1
+        curl -L -o source/fmd-android-$TAG.tar.gz \
+          "https://gitlab.com/fmd-foss/fmd-android/-/archive/$TAG/fmd-android-$TAG.tar.gz"
+        tar -xzf source/fmd-android-$TAG.tar.gz -C source --strip-components=1
 
     - name: Build APK
       id: build-apk
