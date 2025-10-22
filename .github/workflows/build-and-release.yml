@@ -97,5 +97,6 @@ jobs:
       if: ${{ env.STOP != 'true' }}
       uses: softprops/action-gh-release@v2
       with:
+        tag_name: ${{ env.TAG }}
         token: ${{ secrets.GITHUB_TOKEN }}
         files: ${{ env.SIGNED_APK }}
