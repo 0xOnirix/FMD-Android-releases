@@ -43,9 +43,9 @@ jobs:
         ./gradlew clean assembleRelease
         mv app/build/outputs/apk/prod/release/*.apk ../apk/fmd-android-${TAG}-unsigned.apk
 
-        echo "UNSIGNED_APK=apk/findmydevice-${TAG}-unsigned.apk" >> "$GITHUB_ENV"
-        echo "SIGNED_APK=apk/findmydevice-${TAG}-signed.apk" >> "$GITHUB_ENV"
-        echo "ALIGNED_APK=apk/findmydevice-${TAG}-aligned.apk" >> "$GITHUB_ENV"
+        echo "UNSIGNED_APK=apk/fmd-android-${TAG}-unsigned.apk" >> "$GITHUB_ENV"
+        echo "SIGNED_APK=apk/fmd-android-${TAG}-signed.apk" >> "$GITHUB_ENV"
+        echo "ALIGNED_APK=apk/fmd-android-${TAG}-aligned.apk" >> "$GITHUB_ENV"
 
     - name: Setup zipalign
       id: setup-zipalign
