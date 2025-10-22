@@ -40,10 +40,7 @@ jobs:
         mkdir apk
         cd source
         ./gradlew clean assembleRelease
-        mv app/build/outputs/apk/mainline/release/*.apk ../apk/fmd-android-${TAG}-unsigned.apk
-        ls app/build/outputs/apk/mainline/release
-        pwd
-        ls ../apk
+        mv app/build/outputs/apk/prod/release/*.apk ../apk/fmd-android-${TAG}-unsigned.apk
 
     - name: Decode keystore
       id: decode-keystore
